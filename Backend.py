@@ -35,13 +35,18 @@ from groq import Groq, APIConnectionError, APIStatusError, APITimeoutError, Auth
 
 load_dotenv()  # Loads GROQ_API_KEY from a local .env file if present
 
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 
+# NOTE: Groq periodically deprecates/decommissions models. llama-3.3-70b-versatile,
+# llama-3.1-8b-instant, mixtral-8x7b-32768, and gemma2-9b-it (previously used here)
+# have all since been retired. If a model in this list starts failing with a
+# "model_decommissioned" / not-found style error, check
+# https://console.groq.com/docs/models for the current list and
+# https://console.groq.com/docs/deprecations for recommended replacements.
 AVAILABLE_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "mixtral-8x7b-32768",
-    "gemma2-9b-it",
+    "openai/gpt-oss-120b",   # Production — high-capability, strong reasoning/coding (replaces llama-3.3-70b-versatile)
+    "openai/gpt-oss-20b",    # Production — smaller & faster (replaces llama-3.1-8b-instant)
+    "qwen/qwen3.6-27b",      # Preview — strong coding benchmarks; preview models can change/disappear without notice
 ]
 
 SUPPORTED_LANGUAGES = [
@@ -138,7 +143,15 @@ def call_groq(
             "Check your internet connection and try again."
         )
     except APIStatusError as e:
-        return f"❌ **Groq API error** (status {e.status_code}): {e.message}"
+        msg = str(e.message or "")
+        if e.status_code == 404 or "decommission" in msg.lower() or "does not exist" in msg.lower():
+            return (
+                f"🚫 **Model unavailable:** `{model}` appears to be decommissioned or unrecognized by Groq "
+                f"(status {e.status_code}). Groq periodically retires models — pick a different one from the "
+                f"dropdown, or check https://console.groq.com/docs/models for the current list.\n\n"
+                f"Raw error: {msg}"
+            )
+        return f"❌ **Groq API error** (status {e.status_code}): {msg}"
     except Exception:
         return "❌ **Unexpected error:**\n```\n" + traceback.format_exc(limit=2) + "\n```"
 
@@ -443,9 +456,13 @@ def test_api_connection(api_key, model):
     except APIConnectionError:
         return "🌐 Could not connect to the Groq API. Check your network."
     except APIStatusError as e:
-        return f"❌ Groq API error (status {e.status_code}): {e.message}"
+        msg = str(e.message or "")
+        if e.status_code == 404 or "decommission" in msg.lower() or "does not exist" in msg.lower():
+            return (
+                f"🚫 Model `{model}` appears to be decommissioned or unrecognized by Groq "
+                f"(status {e.status_code}). Pick a different model, or check "
+                f"https://console.groq.com/docs/models for the current list."
+            )
+        return f"❌ Groq API error (status {e.status_code}): {msg}"
     except Exception as e:
-        return f"❌ Unexpected error: {e}"
-
-
-
+        return 
