@@ -22,8 +22,9 @@ interface.
 
 ```
 codementor-ai/
-├── app.py              # Gradio UI + Groq backend logic
-├── requirements.txt    # Python dependencies
+├── app.py              # Gradio UI + Groq backend logic (use for local/HF Spaces)
+├── streamlit_app.py    # Streamlit UI, reuses app.py's Groq functions (use for Streamlit Cloud)
+├── requirements.txt    # Python dependencies (covers both UIs)
 ├── .env.example        # Environment variable template
 └── README.md           # You are here
 ```
@@ -132,51 +133,59 @@ git push -u origin main
 
 ---
 
-## ☁️ Deploying to Streamlit Cloud (via Gradio embed) or alternative platforms
+## ☁️ Deploying to Streamlit Cloud
 
-CodeMentor AI's UI is built with **Gradio**, not Streamlit, so there is no native
-`streamlit run` entry point. You have two good options if you specifically want
-Streamlit Cloud or a similar PaaS:
+⚠️ **Important:** `app.py` is a Gradio app — it calls `gradio.launch()`, which
+starts its **own** embedded web server on its own port. Streamlit Community
+Cloud runs your script *inside its own* Streamlit server on a single,
+platform-controlled port and does not allow a second server to bind a port
+inside that container. If you point Streamlit Cloud's "Main file path" at
+`app.py`, you'll hit:
 
-### Option A — Deploy as-is on a generic Python host (Render, Railway, Fly.io, etc.)
-Most of these platforms just need a start command and the `PORT` environment
-variable, which `app.py` already reads:
+```
+OSError: Cannot find empty port in range: 7860-7860...
+```
+
+**Fix: point Streamlit Cloud at `streamlit_app.py` instead of `app.py`.**
+This repo includes a native Streamlit UI (`streamlit_app.py`) that reuses
+every Groq backend function from `app.py` (`explain_code`, `detect_bugs`,
+`generate_hints`, `translate_code`, `generate_tests`, `analyze_complexity`,
+`test_api_connection`) but renders them with real Streamlit widgets
+(`st.tabs`, `st.text_area`, `st.selectbox`, `st.button`) instead of launching
+a second server. No backend logic is duplicated or reimplemented.
+
+### Steps
+1. Push the whole repo (including `streamlit_app.py`) to GitHub.
+2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app**.
+3. Point it at your repo, and set **Main file path** to:
+   ```
+   streamlit_app.py
+   ```
+   (NOT `app.py`)
+4. Under **Advanced settings → Secrets**, add:
+   ```toml
+   GROQ_API_KEY = "gsk_your_real_key_here"
+   ```
+5. Deploy. `streamlit_app.py` automatically reads the key from
+   `st.secrets["GROQ_API_KEY"]` (falling back to the sidebar input if you'd
+   rather paste a key per-session).
+
+### Running the Streamlit version locally
+```bash
+streamlit run streamlit_app.py
+```
+
+### Alternative: generic Python hosts (Render, Railway, Fly.io, etc.)
+If you'd rather keep using the original Gradio `app.py` outside of Hugging
+Face Spaces or Streamlit Cloud, most generic Python hosts are fine with it
+since they don't pre-occupy a port the way Streamlit Cloud does:
 
 ```bash
 python app.py
 ```
 
-Set the following environment variables in the platform's dashboard:
-- `GROQ_API_KEY`
-- `PORT` (many platforms set this automatically)
-
-### Option B — Wrap the Gradio app for Streamlit Cloud
-If you must deploy specifically to Streamlit Cloud, create a thin wrapper
-(`streamlit_app.py`) that launches the Gradio app in a background thread and
-embeds it via an iframe, or — more simply — port the six tab functions
-(`explain_code`, `detect_bugs`, `generate_hints`, `translate_code`,
-`generate_tests`, `analyze_complexity` in `app.py`) into native Streamlit
-widgets (`st.text_area`, `st.selectbox`, `st.button`). The Groq backend logic
-in `app.py` is UI-framework-agnostic and can be imported directly:
-
-```python
-# streamlit_app.py (example skeleton)
-import streamlit as st
-from app import explain_code, AVAILABLE_MODELS, SUPPORTED_LANGUAGES
-
-st.title("🤖 CodeMentor AI")
-api_key = st.text_input("Groq API Key", type="password")
-model = st.selectbox("Model", AVAILABLE_MODELS)
-language = st.selectbox("Language", SUPPORTED_LANGUAGES)
-code = st.text_area("Code or Problem Description", height=300)
-
-if st.button("Explain"):
-    st.markdown(explain_code(api_key, model, language, code, "Intermediate (balanced)"))
-```
-
-Because all Groq/LLM logic lives in plain Python functions in `app.py`
-(decoupled from Gradio components in `build_app()`), reusing it from Streamlit
-requires no backend changes.
+Set `GROQ_API_KEY` (and optionally `PORT`, which many platforms inject
+automatically) in the platform's dashboard.
 
 ---
 
