@@ -22,12 +22,19 @@ interface.
 
 ```
 codementor-ai/
-├── app.py              # Gradio UI + Groq backend logic (use for local/HF Spaces)
-├── streamlit_app.py    # Streamlit UI, reuses app.py's Groq functions (use for Streamlit Cloud)
-├── requirements.txt    # Python dependencies (covers both UIs)
-├── .env.example        # Environment variable template
-└── README.md           # You are here
+├── backend.py               # ALL Groq API logic + prompts — zero UI-framework dependency
+├── app.py                   # Gradio UI, imports from backend.py (use for local/HF Spaces)
+├── streamlit_app.py         # Streamlit UI, imports from backend.py (use for Streamlit Cloud)
+├── requirements.txt         # Core deps: groq, python-dotenv, streamlit
+├── requirements-gradio.txt  # Extra dep needed only for the Gradio UI: gradio
+├── .env.example             # Environment variable template
+└── README.md                # You are here
 ```
+
+`backend.py` has no import of Gradio or Streamlit at all — only `groq` and
+`python-dotenv`. This is deliberate: it means a Gradio install problem can
+never break the Streamlit deployment (or vice versa), since each UI file only
+imports the one extra framework it actually needs.
 
 ---
 
@@ -52,6 +59,12 @@ venv\Scripts\activate           # Windows
 
 ### 3. Install dependencies
 
+For the **Gradio** UI (`app.py`):
+```bash
+pip install -r requirements.txt -r requirements-gradio.txt
+```
+
+For the **Streamlit** UI (`streamlit_app.py`) only:
 ```bash
 pip install -r requirements.txt
 ```
@@ -112,19 +125,22 @@ git push -u origin main
 ## ☁️ Deploying to Hugging Face Spaces
 
 1. Create a new Space at [huggingface.co/new-space](https://huggingface.co/new-space).
-   - **SDK**: choose **Gradio**
+   - **SDK**: choose **Gradio** (the Space runtime provides Gradio itself based on this choice)
    - **Hardware**: the free CPU tier is sufficient (Groq does the heavy lifting remotely)
 2. Push your code to the Space's git repo (Spaces work just like a normal git remote):
    ```bash
    git remote add space https://huggingface.co/spaces/<your-username>/codementor-ai
    git push space main
    ```
-   Or upload the files (`app.py`, `requirements.txt`, `README.md`) directly through
-   the Spaces web UI.
-3. Set your secret API key in the Space:
+   Or upload the files (`app.py`, `backend.py`, `requirements.txt`, `README.md`) directly
+   through the Spaces web UI.
+3. In the Space's `requirements.txt`, make sure `gradio` is listed (copy the one
+   line from `requirements-gradio.txt` into `requirements.txt`, or just upload
+   both files — Spaces installs everything in any `requirements.txt` it finds).
+4. Set your secret API key in the Space:
    - Go to your Space → **Settings** → **Variables and secrets**
    - Add a new secret: `GROQ_API_KEY` = `gsk_your_real_key_here`
-4. The Space will automatically install `requirements.txt` and launch `app.py`.
+5. The Space will automatically install `requirements.txt` and launch `app.py`.
    Because the code falls back to `os.environ.get("GROQ_API_KEY")`, no code
    changes are needed — it will just work once the secret is set.
 
