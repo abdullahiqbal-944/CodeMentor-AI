@@ -4,8 +4,9 @@ CodeMentor AI — Streamlit Cloud entry point
 This file exists ONLY for platforms that require a native Streamlit app
 (e.g. Streamlit Community Cloud). It does NOT launch Gradio's own web server
 (which is what breaks on Streamlit Cloud — see README "Deploying to Streamlit
-Cloud" for why). Instead it reuses every Groq backend function defined in
-app.py and renders them with native Streamlit widgets.
+Cloud" for why). It imports the Groq backend logic from backend.py — a module
+with ZERO Gradio dependency — so this file never touches Gradio at all and
+cannot break due to a Gradio install issue.
 
 Run locally:
     pip install -r requirements.txt
@@ -22,7 +23,7 @@ import os
 
 import streamlit as st
 
-from app import (
+from backend import (
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
     SUPPORTED_LANGUAGES,
